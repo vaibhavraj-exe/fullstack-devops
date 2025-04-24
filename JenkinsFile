@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME_BACKEND = "yourdockerhubusername/fastapi-app"
+        IMAGE_NAME_FRONTEND = "yourdockerhubusername/nextjs-app"
+    }
+
+    stages {
+        stage('Clone Repo') {
+            steps {
+                git 'https://github.com/yourusername/fullstack-app.git'
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    sh 'docker build -t $IMAGE_NAME_BACKEND:latest ./backend'
+                    sh 'docker build -t $IMAGE_NAME_FRONTEND:latest ./frontend'
+                }
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push $IMAGE_NAME_BACKEND:latest
+                        docker push $IMAGE_NAME_FRONTEND:latest
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Containers') {
+            steps {
+                sh """
+                    docker stop backend || true && docker rm backend || true
+                    docker stop frontend || true && docker rm frontend || true
+
+                    docker run -d --name backend -p 8000:8000 $IMAGE_NAME_BACKEND:latest
+                    docker run -d --name frontend -p 3000:3000 $IMAGE_NAME_FRONTEND:latest
+                """
+            }
+        }
+    }
+}
